@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SCARA AR - Vista</title>
+
+  <!-- A-Frame + MindAR (reconocimiento de imagen para detectar el robot real) -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+  <!-- three.js, usado solo para el holograma 3D decorativo (robot.js) -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!--
+    ══════════════════════════════════════════════════════════════════
+    CÓMO FUNCIONA:
+    MindAR analiza el video de la cámara y lo compara contra un
+    "target" (una foto real del SCARA convertida a un archivo .mind).
+    Cuando encuentra esa imagen en la cámara, dispara el evento
+    "targetFound" y mostramos el panel. Cuando el robot sale de
+    cuadro, dispara "targetLost" y lo ocultamos. Así no aparece nada
+    si no apuntas al robot.
+
+    PASO OBLIGATORIO ANTES DE USAR ESTO:
+    1. Toma 1 o VARIAS fotos claras y bien iluminadas de tu SCARA real
+       (de frente, de lado, desde arriba... entre más ángulos subas,
+       más fácil lo va a reconocer sin importar cómo lo mires).
+    2. Ve a https://hiukim.github.io/mind-ar-js-doc/tools/compile/
+       y sube TODAS esas fotos juntas. La herramienta genera un solo
+       archivo "targets.mind" con un target por cada foto (target 0,
+       target 1, target 2...).
+    3. Descarga ese archivo y colócalo en esta misma carpeta, junto
+       a ar.html, robot.js, style.css e index.html.
+    4. Sirve la carpeta con HTTPS (o localhost) porque la cámara solo
+       funciona en contextos seguros. Puedes usar, por ejemplo:
+       npx serve .   (o Live Server de VSCode)
+
+    NOTA: el código de abajo ya soporta hasta 8 fotos distintas
+    (targets 0 al 7). Si subiste menos, los anclajes sobrantes
+    simplemente nunca se activan — no hace falta tocar nada.
+    ══════════════════════════════════════════════════════════════════
+  -->
+
+  <a-scene
+    mindar-image="imageTargetSrc: ./targets.mind; autoStart: true; uiScanning: no; uiLoading: no;"
+    color-space="sRGB"
+    embedded
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+  >
+    <a-camera position="0 0 0" look-controls="enabled: false" cursor="fuse: false; rayOrigin: mouse;"></a-camera>
+
+    <!--
+      Un anclaje por cada posible foto/ángulo del SCARA.
+      Todos disparan el mismo panel — no importa cuál de las fotos
+      sea la que la cámara reconozca en ese momento.
+    -->
+    <a-entity class="anclaje-scara" mindar-image-target="targetIndex: 0"></a-entity>
+    <a-entity class="anclaje-scara" mindar-image-target="targetIndex: 1"></a-entity>
+    <a-entity class="anclaje-scara" mindar-image-target="targetIndex: 2"></a-entity>
+    <a-entity class="anclaje-scara" mindar-image-target="targetIndex: 3"></a-entity>
+    <a-entity class="anclaje-scara" mindar-image-target="targetIndex: 4"></a-entity>
+    <a-entity class="anclaje-scara" mindar-image-target="targetIndex: 5"></a-entity>
+    <a-entity class="anclaje-scara" mindar-image-target="targetIndex: 6"></a-entity>
+    <a-entity class="anclaje-scara" mindar-image-target="targetIndex: 7"></a-entity>
+  </a-scene>
+
+  <!-- Panel de información: oculto hasta que se detecte el SCARA -->
+  <div class="panel-info" id="panel-info">
+    <div class="panel-header">
+      <span class="dot"></span>
+      <h2>Robot SCARA</h2>
+    </div>
+    <div class="panel-body">
+      <div class="fila">
+        <span class="etiqueta">Grados de libertad</span>
+        <span class="valor">4 DOF</span>
+      </div>
+      <div class="fila">
+        <span class="etiqueta">Alcance</span>
+        <span class="valor">400 mm</span>
+      </div>
+      <div class="fila">
+        <span class="etiqueta">Carga máxima</span>
+        <span class="valor">2 kg</span>
+      </div>
+      <div class="fila">
+        <span class="etiqueta">Velocidad</span>
+        <span class="valor">500 mm/s</span>
+      </div>
+      <div class="fila">
+        <span class="etiqueta">Repetibilidad</span>
+        <span class="valor">±0.02 mm</span>
+      </div>
+      <div class="fila">
+        <span class="etiqueta">Ejes</span>
+        <span class="valor">J1 · J2 · Z · R</span>
+      </div>
+      <div class="fila">
+        <span class="etiqueta">Controlador</span>
+        <span class="valor">Arduino</span>
+      </div>
+    </div>
+    <div class="badge">● EN LÍNEA</div>
+  </div>
+
+  <!-- Holograma 3D en esquina: también oculto hasta detectar el SCARA -->
+  <div class="holo-contenedor" id="holo-contenedor">
+    <canvas id="holograma"></canvas>
+    <p class="holo-label">Modelo 3D · Rotando</p>
+  </div>
+
+  <!-- Mensaje mientras no se detecta el robot -->
+  <p class="mensaje-escaneo" id="mensaje-escaneo">🔍 Apunta la cámara al robot SCARA</p>
+
+  <!-- Botón volver -->
+  <button class="btn-volver" onclick="window.location.href='index.html'">← Volver</button>
+
+  <script src="robot.js"></script>
+  <script>
+    const panel = document.getElementById('panel-info');
+    const holo = document.getElementById('holo-contenedor');
+    const mensaje = document.getElementById('mensaje-escaneo');
+    const anclajes = document.querySelectorAll('.anclaje-scara');
+
+    // Contamos cuántos de los anclajes (fotos/ángulos) están detectados
+    // en este momento, para no ocultar el panel si todavía hay al
+    // menos uno activo (por si la cámara alcanza a ver 2 ángulos a la vez).
+    let anclajesActivos = 0;
+
+    function mostrarInfo() {
+      panel.classList.add('visible');
+      holo.classList.add('visible');
+      mensaje.classList.add('oculto');
+    }
+
+    function ocultarInfo() {
+      panel.classList.remove('visible');
+      holo.classList.remove('visible');
+      mensaje.classList.remove('oculto');
+    }
+
+    anclajes.forEach((anclaje) => {
+      // Cuando MindAR reconoce el SCARA (con cualquiera de las fotos) → mostramos la info
+      anclaje.addEventListener('targetFound', () => {
+        anclajesActivos++;
+        mostrarInfo();
+      });
+
+      // Cuando ese ángulo del SCARA sale de la vista → revisamos si quedó alguno más
+      anclaje.addEventListener('targetLost', () => {
+        anclajesActivos = Math.max(0, anclajesActivos - 1);
+        if (anclajesActivos === 0) {
+          ocultarInfo();
+        }
+      });
+    });
+
+    // Si el archivo targets.mind no existe o falla la cámara, avisamos
+    const escena = document.querySelector('a-scene');
+    escena.addEventListener('arError', () => {
+      mensaje.textContent = '⚠️ No se pudo iniciar la cámara o falta targets.mind';
+    });
+  </script>
+</body>
+</html>
